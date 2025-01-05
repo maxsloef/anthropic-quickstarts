@@ -48,8 +48,12 @@ RUN apt-get update && \
     tint2 \
     galculator \
     pcmanfm \
-    unzip && \
+    unzip \
+    nodejs \
+    npm && \
     apt-get clean
+
+RUN npm install -g live-server
 
 # Install noVNC
 RUN git clone --branch v1.5.0 https://github.com/novnc/noVNC.git /opt/noVNC && \

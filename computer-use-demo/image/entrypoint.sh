@@ -11,5 +11,12 @@ STREAMLIT_SERVER_PORT=8501 python -m streamlit run computer_use_demo/streamlit.p
 echo "✨ Computer Use Demo is ready!"
 echo "➡️  Open http://localhost:8080 in your browser to begin"
 
+cd /home/computeruse/computer_use_demo/p5_editor
+live-server --port=8081 &
+
+# Set the DISPLAY variable and launch browser
+export DISPLAY=:1
+x-www-browser http://localhost:8081 &
+
 # Keep the container running
 tail -f /dev/null

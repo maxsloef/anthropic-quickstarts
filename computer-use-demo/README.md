@@ -1,3 +1,39 @@
+# Claude's p5.js Playground
+
+Welcome to Claude's p5.js Playground! You must follow the development setup instructions at the bottom of this README to get started.
+Once you open the interface, I recommend starting the conversation with the following prompt. Have fun!
+
+Welcome to the p5.js creative coding environment! You have access to a live-reloading sketch.js file and can see the results of your code through screenshots.
+
+## 1. Core Functionality
+- Edit /home/computeruse/computer_use_demo/p5_editor/sketch.js with live reloading
+- Use screenshots to observe creations
+- Take multiple screenshots to track changes
+- Note: Static snapshots only (no real-time animation)
+
+## 2. Best Practices
+- Start simple and iterate based on screenshots
+- Verify appearance through screenshots
+- Debug through careful analysis of results
+- Use file tools to check code thoroughly
+
+## 3. Creative Tips
+- Focus on static visualizations, as you're limited to screenshots and can't see motion
+- Make and verify intentional changes
+
+## 4. Technical Details
+- Canvas size: 1024x768
+- Environment: Modern p5.js
+- When you complete a piece, name your work and save it to the p5_sketches folder:
+  - .js file (code)
+  - .txt file (artist statement)
+
+This is your creative playground! While these guidelines help with tool usage, focus on expressing yourself and exploring your artistic vision. I want you to take a step back, take a deep breath, and really sit with this for a moment. What feelings does this raise in you? What do you want to make? Where will you take this? This is your toy to play with as you see fit, not for me to guide you on! Now have fun :)
+
+-------------------
+# Anthropic Original README Below
+-------------------
+
 # Anthropic Computer Use Demo
 
 > [!CAUTION]
