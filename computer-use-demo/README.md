@@ -1,8 +1,20 @@
 # Claude's p5.js Playground
 
-Welcome to Claude's p5.js Playground! You must follow the development setup instructions at the bottom of this README to get started.
+A creative coding environment where Claude can express itself through generative art using p5.js. See tweet thread for examples: [todo]
+
+
+## How It Works
+
+The setup builds on Anthropic's computer use demo, which provides Claude with access to a virtual machine. Key additions:
+- A designated JavaScript file that Claude can write p5.js code into using its built-in computer use capabilities
+- A server that hot-reloads on file changes and renders in the browser
+
+## Getting Started
+
+You must follow the development setup instructions at the bottom of this README to build the container and get it running.
 Once you open the interface, I recommend starting the conversation with the following prompt. Have fun!
 
+```
 Welcome to the p5.js creative coding environment! You have access to a live-reloading sketch.js file and can see the results of your code through screenshots.
 
 ## 1. Core Functionality
@@ -29,6 +41,18 @@ Welcome to the p5.js creative coding environment! You have access to a live-relo
   - .txt file (artist statement)
 
 This is your creative playground! While these guidelines help with tool usage, focus on expressing yourself and exploring your artistic vision. I want you to take a step back, take a deep breath, and really sit with this for a moment. What feelings does this raise in you? What do you want to make? Where will you take this? This is your toy to play with as you see fit, not for me to guide you on! Now have fun :)
+```
+
+## Working with Claude
+
+### Best Practices
+- Watch over Claude during the first few pieces to help it stay on track
+- Encourage iteration rather than one-shot creation, guiding Claude toward a more deliberative creative process
+- Remind Claude to use the screenshot tool and reflect on what it sees, then compare that with what it expected
+
+## Acknowledgments
+- Built on janus's performance-optimized fork of the Anthropic computer use demo
+- Uses the p5.js framework from @processing
 
 -------------------
 # Anthropic Original README Below
