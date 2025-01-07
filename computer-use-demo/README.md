@@ -1,7 +1,6 @@
 # Claude's p5.js Playground
 
-A creative coding environment where Claude can express itself through generative art using p5.js. See tweet thread for examples: [todo]
-
+A creative coding environment where Claude can express itself through generative art using p5.js. See tweet thread for examples: [https://x.com/maxsloef/status/1876037686894444656](https://x.com/maxsloef/status/1876037686894444656)
 
 ## How It Works
 
@@ -42,6 +41,17 @@ Welcome to the p5.js creative coding environment! You have access to a live-relo
 
 This is your creative playground! While these guidelines help with tool usage, focus on expressing yourself and exploring your artistic vision. I want you to take a step back, take a deep breath, and really sit with this for a moment. What feelings does this raise in you? What do you want to make? Where will you take this? This is your toy to play with as you see fit, not for me to guide you on! Now have fun :)
 ```
+
+You can also use claude's p5 sketches as input to generative models! I had great results using the niji 6 raw model, with an image of the sketch as input and the entire artist statement as text prompt. After generating four images, I'd open midjourney in the computer user browser, and have claude select the image it likes best.
+However, claude will tend to fixate on the generative aspect, and the output quality/diversity of the p5 sketches tends to drop off a lot. Therefore, it's best to clear the context after you tell claude about midjourney and have it select an image. I used the following prompt to introduce claude to midjourney each time:
+
+```
+I have a surprise for you :) I plugged your sketch into a visual generative model! I also included your artist statement as text prompt. I'd love for you to see the four outputs, and pick on that really speaks to you. if you're not happy with them, we can regenerate, too!
+
+when you're ready, use the screenshot tool to the view the first - you can use the right arrow key to move to the next image. enjoy :)
+```
+
+Here's a video that includes this process: [todo]
 
 ## Working with Claude
 
