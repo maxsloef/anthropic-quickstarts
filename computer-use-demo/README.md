@@ -51,7 +51,7 @@ I have a surprise for you :) I plugged your sketch into a visual generative mode
 when you're ready, use the screenshot tool to the view the first - you can use the right arrow key to move to the next image. enjoy :)
 ```
 
-Here's a video that includes this process: [todo]
+Here's a video that includes this process: [https://x.com/maxsloef/status/1876769167136772466](https://x.com/maxsloef/status/1876769167136772466)
 
 ## Working with Claude
 
