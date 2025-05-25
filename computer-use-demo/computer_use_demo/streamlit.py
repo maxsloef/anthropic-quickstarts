@@ -357,11 +357,6 @@ async def main():
             key="render_api_responses",
             help="Render the API responses in the HTTP Exchange Logs tab (this is slow)",
         )
-        st.checkbox(
-            "Hide screenshots",
-            key="hide_images",
-            help="Hide screenshots from the UI. Does not affect context sent to the model.",
-        )
 
         st.divider()  # Add visual separation
 

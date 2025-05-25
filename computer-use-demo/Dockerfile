@@ -7,6 +7,7 @@ RUN apt-get update && \
     apt-get -y upgrade && \
     apt-get -y install \
     # UI Requirements
+    curl \
     xvfb \
     xterm \
     xdotool \
@@ -48,12 +49,8 @@ RUN apt-get update && \
     tint2 \
     galculator \
     pcmanfm \
-    unzip \
-    nodejs \
-    npm && \
+    unzip && \
     apt-get clean
-
-RUN npm install -g live-server
 
 # Install noVNC
 RUN git clone --branch v1.5.0 https://github.com/novnc/noVNC.git /opt/noVNC && \
