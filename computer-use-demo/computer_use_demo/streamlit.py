@@ -14,11 +14,12 @@ import subprocess
 import time
 import traceback
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from functools import partial, wraps
 from pathlib import Path, PosixPath
-from typing import cast
+from typing import cast, get_args
 
 import httpx
 import streamlit as st
@@ -31,11 +32,52 @@ from anthropic.types.beta import (
 from streamlit.delta_generator import DeltaGenerator
 
 from computer_use_demo.loop import (
-    PROVIDER_TO_DEFAULT_MODEL_NAME,
     APIProvider,
     sampling_loop,
 )
-from computer_use_demo.tools import ToolResult
+from computer_use_demo.tools import ToolResult, ToolVersion
+
+PROVIDER_TO_DEFAULT_MODEL_NAME: dict[APIProvider, str] = {
+    APIProvider.ANTHROPIC: "claude-sonnet-4-20250514",
+    APIProvider.BEDROCK: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    APIProvider.VERTEX: "claude-3-5-sonnet-v2@20241022",
+}
+
+
+@dataclass(kw_only=True, frozen=True)
+class ModelConfig:
+    tool_version: ToolVersion
+    max_output_tokens: int
+    default_output_tokens: int
+    has_thinking: bool = False
+
+
+SONNET_3_5_NEW = ModelConfig(
+    tool_version="computer_use_20241022",
+    max_output_tokens=1024 * 8,
+    default_output_tokens=1024 * 4,
+)
+
+SONNET_3_7 = ModelConfig(
+    tool_version="computer_use_20250124",
+    max_output_tokens=128_000,
+    default_output_tokens=1024 * 16,
+    has_thinking=True,
+)
+
+CLAUDE_4 = ModelConfig(
+    tool_version="computer_use_20250124",
+    max_output_tokens=128_000,
+    default_output_tokens=1024 * 16,
+    has_thinking=True,
+)
+
+MODEL_TO_MODEL_CONF: dict[str, ModelConfig] = {
+    "claude-3-7-sonnet-20250219": SONNET_3_7,
+    "claude-opus-4@20250508": CLAUDE_4,
+    "claude-sonnet-4-20250514": CLAUDE_4,
+    "claude-opus-4-20250514": CLAUDE_4,
+}
 
 CONFIG_DIR = PosixPath("~/.anthropic").expanduser()
 API_KEY_FILE = CONFIG_DIR / "api_key"
@@ -168,6 +210,8 @@ def setup_state():
         st.session_state.custom_system_prompt = load_from_storage("system_prompt") or ""
     if "hide_images" not in st.session_state:
         st.session_state.hide_images = False
+    if "token_efficient_tools_beta" not in st.session_state:
+        st.session_state.token_efficient_tools_beta = False
     if "in_sampling_loop" not in st.session_state:
         st.session_state.in_sampling_loop = False
     if "render_api_responses" not in st.session_state:
@@ -178,6 +222,26 @@ def _reset_model():
     st.session_state.model = PROVIDER_TO_DEFAULT_MODEL_NAME[
         cast(APIProvider, st.session_state.provider)
     ]
+    _reset_model_conf()
+
+
+def _reset_model_conf():
+    model_conf = (
+        MODEL_TO_MODEL_CONF.get(
+            st.session_state.model, SONNET_3_5_NEW
+        )  # Default fallback
+    )
+
+    # If we're in radio selection mode, use the selected tool version
+    if hasattr(st.session_state, "tool_versions"):
+        st.session_state.tool_version = st.session_state.tool_versions
+    else:
+        st.session_state.tool_version = model_conf.tool_version
+
+    st.session_state.has_thinking = model_conf.has_thinking
+    st.session_state.output_tokens = model_conf.default_output_tokens
+    st.session_state.max_output_tokens = model_conf.max_output_tokens
+    st.session_state.thinking_budget = int(model_conf.default_output_tokens / 2)
 
 
 def is_message_visible(idx: int, total_messages: int) -> bool:
@@ -216,7 +280,7 @@ async def main():
             on_change=_reset_api_provider,
         )
 
-        st.text_input("Model", key="model")
+        st.text_input("Model", key="model", on_change=_reset_model_conf)
 
         if st.session_state.provider == APIProvider.ANTHROPIC:
             st.text_input(
@@ -233,6 +297,32 @@ async def main():
                 "system_prompt", st.session_state.custom_system_prompt
             ),
         )
+        st.checkbox("Hide screenshots", key="hide_images")
+        st.checkbox(
+            "Enable token-efficient tools beta", key="token_efficient_tools_beta"
+        )
+        versions = get_args(ToolVersion)
+        st.radio(
+            "Tool Versions",
+            key="tool_versions",
+            options=versions,
+            index=versions.index(st.session_state.tool_version),
+            on_change=lambda: setattr(
+                st.session_state, "tool_version", st.session_state.tool_versions
+            ),
+        )
+
+        st.number_input("Max Output Tokens", key="output_tokens", step=1)
+
+        st.checkbox("Thinking Enabled", key="thinking", value=False)
+        st.number_input(
+            "Thinking Budget",
+            key="thinking_budget",
+            max_value=st.session_state.max_output_tokens,
+            step=1,
+            disabled=not st.session_state.thinking,
+        )
+
         if st.session_state.provider == APIProvider.ANTHROPIC:
             st.checkbox(
                 "Cache prompt",
@@ -340,7 +430,7 @@ async def main():
 
         # Reset button in its own section
         st.divider()
-        if st.button("Reset Current Session", type="primary"):
+        if st.button("Reset", type="primary"):
             with st.spinner("Resetting..."):
                 st.session_state.messages = []
                 st.session_state.tools = {}
@@ -467,6 +557,12 @@ async def main():
                 prompt_caching=st.session_state.prompt_caching,
                 only_n_most_recent_messages=st.session_state.only_n_most_recent_messages,
                 # logger=logger,
+                tool_version=st.session_state.tool_versions,
+                max_tokens=st.session_state.output_tokens,
+                thinking_budget=st.session_state.thinking_budget
+                if st.session_state.thinking
+                else None,
+                token_efficient_tools_beta=st.session_state.token_efficient_tools_beta,
             )
 
 
@@ -682,6 +778,10 @@ def _render_message(
                 st.write(message["text"])
                 if not message["text"] == INTERRUPT_TEXT:
                     show_rewind_button = True
+            elif message["type"] == "thinking":
+                thinking_content = message.get("thinking", "")
+                st.markdown(f"[Thinking]\n\n{thinking_content}")
+                show_rewind_button = True
             elif message["type"] == "tool_use":
                 st.code(f'Tool Use: {message["name"]}\nInput: {message["input"]}')
             else:

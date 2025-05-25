@@ -29,9 +29,13 @@ from anthropic.types.beta import (
     BetaToolUseBlockParam,
 )
 
-from .tools import BashTool, ComputerTool, EditTool, ToolCollection, ToolResult
+from .tools import (
+    TOOL_GROUPS_BY_VERSION,
+    ToolCollection,
+    ToolResult,
+    ToolVersion,
+)
 
-COMPUTER_USE_BETA_FLAG = "computer-use-2024-10-22"
 PROMPT_CACHING_BETA_FLAG = "prompt-caching-2024-07-31"
 
 
@@ -39,13 +43,6 @@ class APIProvider(StrEnum):
     ANTHROPIC = "anthropic"
     BEDROCK = "bedrock"
     VERTEX = "vertex"
-
-
-PROVIDER_TO_DEFAULT_MODEL_NAME: dict[APIProvider, str] = {
-    APIProvider.ANTHROPIC: "claude-3-5-sonnet-20241022",
-    APIProvider.BEDROCK: "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    APIProvider.VERTEX: "claude-3-5-sonnet-v2@20241022",
-}
 
 
 # This system prompt is optimized for the Docker environment in this repository and
@@ -58,7 +55,7 @@ SYSTEM_PROMPT = f"""<SYSTEM_CAPABILITY>
 * You can feel free to install Ubuntu applications with your bash tool. Use curl instead of wget.
 * To open firefox, please just click on the firefox icon.  Note, firefox-esr is what is installed on your system.
 * Using bash tool you can start GUI applications, but you need to set export DISPLAY=:1 and use a subshell. For example "(DISPLAY=:1 xterm &)". GUI apps run with bash tool will appear within your desktop environment, but they may take some time to appear. Take a screenshot to confirm it did.
-* When using your bash tool with commands that are expected to output very large quantities of text, redirect into a tmp file and use str_replace_editor or `grep -n -B <lines before> -A <lines after> <query> <filename>` to confirm output.
+* When using your bash tool with commands that are expected to output very large quantities of text, redirect into a tmp file and use str_replace_based_edit_tool or `grep -n -B <lines before> -A <lines after> <query> <filename>` to confirm output.
 * When viewing a page it can be helpful to zoom out so that you can see everything on the page.  Either that, or make sure you scroll down to see everything before deciding something isn't available.
 * When using your computer function calls, they take a while to run and send back to you.  Where possible/feasible, try to chain multiple of these calls all into one function calls request.
 * The current date is {datetime.today().strftime('%A, %B %-d, %Y')}.
@@ -66,7 +63,7 @@ SYSTEM_PROMPT = f"""<SYSTEM_CAPABILITY>
 
 <IMPORTANT>
 * When using Firefox, if a startup wizard appears, IGNORE IT.  Do not even click "skip this step".  Instead, click on the address bar where it says "Search or enter address", and enter the appropriate search term or URL there.
-* If the item you are looking at is a pdf, if after taking a single screenshot of the pdf it seems that you want to read the entire document instead of trying to continue to read the pdf from your screenshots + navigation, determine the URL, use curl to download the pdf, install and use pdftotext to convert it to a text file, and then read that text file directly with your StrReplaceEditTool.
+* If the item you are looking at is a pdf, if after taking a single screenshot of the pdf it seems that you want to read the entire document instead of trying to continue to read the pdf from your screenshots + navigation, determine the URL, use curl to download the pdf, install and use pdftotext to convert it to a text file, and then read that text file directly with your str_replace_based_edit_tool.
 </IMPORTANT>"""
 
 
@@ -86,15 +83,15 @@ async def sampling_loop(
     only_n_most_recent_messages: int | None = None,
     prompt_caching: bool = False,
     max_tokens: int = 4096,
+    tool_version: ToolVersion,
+    thinking_budget: int | None = None,
+    token_efficient_tools_beta: bool = False,
 ):
     """
     Agentic sampling loop for the assistant/tool interaction of computer use.
     """
-    tool_collection = ToolCollection(
-        ComputerTool(),
-        BashTool(),
-        EditTool(),
-    )
+    tool_group = TOOL_GROUPS_BY_VERSION[tool_version]
+    tool_collection = ToolCollection(*(ToolCls() for ToolCls in tool_group.tools))
     system = BetaTextBlockParam(
         type="text",
         text=f"{SYSTEM_PROMPT}{' ' + system_prompt_suffix if system_prompt_suffix else ''}",
@@ -102,7 +99,9 @@ async def sampling_loop(
 
     while True:
         enable_prompt_caching = False
-        betas = [COMPUTER_USE_BETA_FLAG]
+        betas = [tool_group.beta_flag] if tool_group.beta_flag else []
+        if token_efficient_tools_beta:
+            betas.append("token-efficient-tools-2025-02-19")
         image_truncation_threshold = only_n_most_recent_images or 0
         if provider == APIProvider.ANTHROPIC:
             client = Anthropic(api_key=api_key, max_retries=4)
@@ -119,8 +118,9 @@ async def sampling_loop(
             # Because cached reads are 10% of the price, we don't think it's
             # ever sensible to break the cache by truncating images
             only_n_most_recent_images = 0
+            # Use type ignore to bypass TypedDict check until SDK types are updated
             only_n_most_recent_messages = 0
-            system["cache_control"] = {"type": "ephemeral"}
+            system["cache_control"] = {"type": "ephemeral"}  # type: ignore
         else:
             _remove_prompt_caching(messages)
 
@@ -135,6 +135,12 @@ async def sampling_loop(
                 only_n_most_recent_images,
                 min_removal_threshold=image_truncation_threshold,
             )
+        extra_body = {}
+        if thinking_budget:
+            # Ensure we only send the required fields for thinking
+            extra_body = {
+                "thinking": {"type": "enabled", "budget_tokens": thinking_budget}
+            }
 
         # Call the API
         # we use raw_response to provide debug information to streamlit. Your
@@ -151,6 +157,7 @@ async def sampling_loop(
                 system=[system],
                 tools=tool_collection.to_params(),
                 betas=betas,
+                extra_body=extra_body,
             )
         except (APIStatusError, APIResponseValidationError) as e:
             api_response_callback(e.request, e.response, e)
@@ -243,12 +250,23 @@ def _maybe_filter_to_n_most_recent_images(
 
 def _response_to_params(
     response: BetaMessage,
-) -> list[BetaTextBlockParam | BetaToolUseBlockParam]:
-    res: list[BetaTextBlockParam | BetaToolUseBlockParam] = []
+) -> list[BetaContentBlockParam]:
+    res: list[BetaContentBlockParam] = []
     for block in response.content:
         if isinstance(block, BetaTextBlock):
-            res.append({"type": "text", "text": block.text})
+            if block.text:
+                res.append(BetaTextBlockParam(type="text", text=block.text))
+            elif getattr(block, "type", None) == "thinking":
+                # Handle thinking blocks - include signature field
+                thinking_block = {
+                    "type": "thinking",
+                    "thinking": getattr(block, "thinking", None),
+                }
+                if hasattr(block, "signature"):
+                    thinking_block["signature"] = getattr(block, "signature", None)
+                res.append(cast(BetaContentBlockParam, thinking_block))
         else:
+            # Handle tool use blocks normally
             res.append(cast(BetaToolUseBlockParam, block.model_dump()))
     return res
 
@@ -268,11 +286,12 @@ def _inject_prompt_caching(
         ):
             if breakpoints_remaining:
                 breakpoints_remaining -= 1
-                content[-1]["cache_control"] = BetaCacheControlEphemeralParam(
+                # Use type ignore to bypass TypedDict check until SDK types are updated
+                content[-1]["cache_control"] = BetaCacheControlEphemeralParam(  # type: ignore
                     {"type": "ephemeral"}
                 )
             else:
-                content[-1].pop("cache_control", None)
+                content[-1].pop("cache_control", None)  # type: ignore
                 # we'll only every have one extra turn per loop
                 break
 
@@ -284,7 +303,7 @@ def _remove_prompt_caching(
         if message["role"] == "user" and isinstance(
             content := message["content"], list
         ):
-            content[-1].pop("cache_control", None)
+            content[-1].pop("cache_control", None)  # type: ignore
 
 
 def _make_api_tool_result(
